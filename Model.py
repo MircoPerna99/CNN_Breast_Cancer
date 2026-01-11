@@ -1,14 +1,27 @@
 import pandas as pd
 import numpy as np
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, AveragePooling2D
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import os
 import cv2
 import tensorflow as tf
-print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+import keras 
+devices = tf.config.list_physical_devices('GPU')
 
+if len(devices) > 0:
+    print(f"Successo! Trovata GPU: {devices[0]}")
+    # Verifica che sia effettivamente il supporto Metal
+    details = tf.config.experimental.get_device_details(devices[0])
+    print(f"Tipo dispositivo: {details.get('device_name')}")
+    print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+    tf.config.set_visible_devices(devices[0], 'GPU')
+    tf.config.experimental.set_memory_growth(devices[0], True)
+else:
+    print("GPU non trovata. Controlla l'installazione di tensorflow-metal.")
+
+# tf.debugging.set_log_device_placement(True)
 def load_data():
   images = []
   labels = []
@@ -40,16 +53,29 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2)
 #Define model
 model = Sequential(
   [Conv2D(filters=4, kernel_size=(3,3), activation='relu',input_shape=(224, 224, 1)),
-   MaxPooling2D(pool_size=(2, 2)),
+   AveragePooling2D(pool_size=(2, 2)),
+   Conv2D(filters=16, kernel_size=(3,3), activation='relu'),
+   AveragePooling2D(pool_size=(2, 2)),
+   Conv2D(filters=80, kernel_size=(3,3), activation='relu'),
+   AveragePooling2D(pool_size=(2, 2)),
    Flatten(),
-   Dense(128, activation='relu'),
+   Dense(16, activation='relu'),
+   Dense(8, activation='relu'),
    Dense(1, activation='sigmoid')
    ]
 )
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+optimizer = keras.optimizers.Adam(lr=0.01)
+
+model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
 model.summary()
 
-# model.fit(X_train, y_train,epochs=50,batch_size=5)
+model.fit(X_train, y_train,epochs=20)
 
+y_hat = model.predict(X_test)
+y_hat = [0 if val < 0.5 else 1 for val in y_hat]
+
+accuracy = accuracy_score(y_test, y_hat)
+print(accuracy)
 
 
