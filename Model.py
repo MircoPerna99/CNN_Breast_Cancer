@@ -1,7 +1,6 @@
-import pandas as pd
 import numpy as np
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, AveragePooling2D
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, AveragePooling2D,Input
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import os
@@ -26,7 +25,7 @@ def load_data():
   images = []
   labels = []
   class_names = ['Benign', 'Malignant']
-  path_base = "Data_To_Use/"
+  path_base = "Data_To_Use_Filtered/"
 
   for label, class_name in enumerate(class_names):
     class_dir = os.path.join(path_base, class_name)
@@ -47,30 +46,35 @@ def load_data():
   
 X, y = load_data()
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.3)
 
 
 #Define model
 model = Sequential(
-  [Conv2D(filters=4, kernel_size=(3,3), activation='relu',input_shape=(224, 224, 1)),
-   AveragePooling2D(pool_size=(2, 2)),
-   Conv2D(filters=16, kernel_size=(3,3), activation='relu'),
-   AveragePooling2D(pool_size=(2, 2)),
-   Conv2D(filters=80, kernel_size=(3,3), activation='relu'),
-   AveragePooling2D(pool_size=(2, 2)),
+  [Input(shape=(224, 224, 1)),
+   Conv2D(filters=10, kernel_size=(5,5),input_shape=(224, 224, 1)),
+   MaxPooling2D(pool_size=(2, 2)),
+   Conv2D(filters=16, kernel_size=(3,2)),
+   MaxPooling2D(pool_size=(2, 2)),
+   Conv2D(filters=16, kernel_size=(3,2)),
+   MaxPooling2D(pool_size=(2, 1)),
+   Conv2D(filters=80, kernel_size=(3,1)),
+   Conv2D(filters=80, kernel_size=(3,1)),
+   MaxPooling2D(pool_size=(2, 1)),
    Flatten(),
    Dense(16, activation='relu'),
    Dense(8, activation='relu'),
+   Dense(16, activation='relu'),
    Dense(1, activation='sigmoid')
    ]
 )
 
-optimizer = keras.optimizers.Adam(lr=0.01)
+# optimizer = keras.optimizers.Adam(learning_rate=0.01)
 
-model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
+model.compile(optimizer='sgd', loss='binary_crossentropy', metrics=['accuracy'])
 model.summary()
 
-model.fit(X_train, y_train,epochs=20)
+model.fit(X_train, y_train,epochs=50)
 
 y_hat = model.predict(X_test)
 y_hat = [0 if val < 0.5 else 1 for val in y_hat]
