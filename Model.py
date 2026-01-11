@@ -1,11 +1,13 @@
 import pandas as pd
 import numpy as np
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import os
 import cv2
-
-
+import tensorflow as tf
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 def load_data():
   images = []
@@ -34,6 +36,20 @@ X, y = load_data()
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2)
 
+
+#Define model
+model = Sequential(
+  [Conv2D(filters=4, kernel_size=(3,3), activation='relu',input_shape=(224, 224, 1)),
+   MaxPooling2D(pool_size=(2, 2)),
+   Flatten(),
+   Dense(128, activation='relu'),
+   Dense(1, activation='sigmoid')
+   ]
+)
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model.summary()
+
+# model.fit(X_train, y_train,epochs=50,batch_size=5)
 
 
 
