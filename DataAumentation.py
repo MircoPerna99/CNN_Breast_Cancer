@@ -14,7 +14,7 @@ for index, row in df.iterrows():
     
     img = cv2.imread(file_name,cv2.IMREAD_GRAYSCALE)
     cv2.imwrite("/Users/mircoperna/Documents/Universita/Magistrale/DeepLearning/Code/CNN_Breast_Cancer/Data_To_Use/"+row['image_id']+".pgm", img)
-    data.append([row["image_id"], row["result"]])
+    data.append([row["image_id"]+".pgm", row["result"]])
     
     rotated_90 = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE) 
     cv2.imwrite("/Users/mircoperna/Documents/Universita/Magistrale/DeepLearning/Code/CNN_Breast_Cancer/Data_To_Use/"+row['image_id']+"_90.pgm", rotated_90)
