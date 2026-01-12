@@ -72,8 +72,10 @@ def load_data(dataset_type:DatasetTypes):
   folder = define_folder(dataset_type)
   path_base = f"{folder}/"
 
+  path_base_training = path_base+"Training/"
+  path_base_test = path_base+"Test/"
   for label, class_name in enumerate(class_names):
-    class_dir = os.path.join(path_base, class_name)
+    class_dir = os.path.join(path_base_training, class_name)
     print(f"Load class {class_name}...")
     for img_name in os.listdir(class_dir):
       img_path = os.path.join(class_dir, img_name)
@@ -83,10 +85,24 @@ def load_data(dataset_type:DatasetTypes):
         labels.append(label)
     print(f"Load class {class_name} completed")
         
-  X = np.array(images, dtype='float32') / 255.0
-  y = np.array(labels, dtype='int32')
+  X_training = np.array(images, dtype='float32') / 255.0
+  y_training = np.array(labels, dtype='int32')
   
-  return X, y
+  for label, class_name in enumerate(class_names):
+    class_dir = os.path.join(path_base_test, class_name)
+    print(f"Load class {class_name}...")
+    for img_name in os.listdir(class_dir):
+      img_path = os.path.join(class_dir, img_name)
+      img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+      if img is not None:
+        images.append(img)
+        labels.append(label)
+    print(f"Load class {class_name} completed")
+  
+  X_test = np.array(images, dtype='float32') / 255.0
+  y_test = np.array(labels, dtype='int32')
+  
+  return X_training,X_test,y_training, y_test
 
 
 devices = tf.config.list_physical_devices('GPU')
@@ -101,11 +117,11 @@ else:
 cross_validation_results=[]
 
 for type in DatasetTypes:
-  X, y = load_data(type)
+  X_training,X_test,y_training, y_test= load_data(type)
   details = []
   details.append(type)
-  details.append(apply_cross_validation(X, y, k=5))
-  details.append(apply_cross_validation(X, y, k=10))
+  details.append(apply_cross_validation(X_training, y_training, k=5))
+  details.append(apply_cross_validation(X_training, y_training, k=10))
   cross_validation_results.append(details)
 
 for result in cross_validation_results:
