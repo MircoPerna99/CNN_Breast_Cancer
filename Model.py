@@ -9,6 +9,7 @@ import os
 import cv2
 import tensorflow as tf
 from sklearn.model_selection import KFold
+from DataAugmentation import DatasetTypes,define_folder,create_dataset
 
 def create_model(seeSummary = False):
   model = Sequential(
@@ -27,7 +28,7 @@ def create_model(seeSummary = False):
     Dense(1, activation='sigmoid')
     ]
   )
-
+  
   optimizer = tf.keras.optimizers.SGD(
       learning_rate=0.01,
       momentum=0.7,
@@ -54,35 +55,22 @@ def apply_cross_validation(X, y, k=5):
     
     model.fit(X_train_fold, y_train_fold,epochs=10,batch_size=10)
 
-    y_hat = model.predict(X_val_fold)
+    y_hat = model(X_val_fold, training=False)
     y_hat = [0 if val < 0.5 else 1 for val in y_hat]
 
     accuracy = accuracy_score(y_val_fold, y_hat)
     print(accuracy)
     accuracy_per_fold.append(accuracy)
+    
+  return accuracy_per_fold
   
-  average_accuracy = np.mean(accuracy_per_fold)
-  print(f'The average accuracy is {average_accuracy}')
-
-
-devices = tf.config.list_physical_devices('GPU')
-
-if len(devices) > 0:
-    print(f"Successo! Trovata GPU: {devices[0]}")
-    # Verifica che sia effettivamente il supporto Metal
-    details = tf.config.experimental.get_device_details(devices[0])
-    print(f"Tipo dispositivo: {details.get('device_name')}")
-    print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
-    tf.config.set_visible_devices(devices[0], 'GPU')
-    tf.config.experimental.set_memory_growth(devices[0], True)
-else:
-    print("GPU non trovata.")
-
-def load_data():
+def load_data(dataset_type:DatasetTypes):
   images = []
   labels = []
   class_names = ['Benign', 'Malignant']
-  path_base = "Data_To_Use_Component/"
+  create_dataset(dataset_type)
+  folder = define_folder(dataset_type)
+  path_base = f"{folder}/"
 
   for label, class_name in enumerate(class_names):
     class_dir = os.path.join(path_base, class_name)
@@ -98,15 +86,36 @@ def load_data():
   X = np.array(images, dtype='float32') / 255.0
   y = np.array(labels, dtype='int32')
   
-  
   return X, y
-  
-X, y = load_data()
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2)
 
 
-apply_cross_validation(X_train, y_train)
+devices = tf.config.list_physical_devices('GPU')
+
+if len(devices) > 0:
+    details = tf.config.experimental.get_device_details(devices[0])
+    tf.config.set_visible_devices(devices[0], 'GPU')
+    tf.config.experimental.set_memory_growth(devices[0], True)
+else:
+    print("GPU non trovata.")
+
+cross_validation_results=[]
+
+for type in DatasetTypes:
+  X, y = load_data(type)
+  details = []
+  details.append(type)
+  details.append(apply_cross_validation(X, y, k=5))
+  details.append(apply_cross_validation(X, y, k=10))
+  cross_validation_results.append(details)
+
+for result in cross_validation_results:
+  print(f"Result for dataset {result[0]}")
+  print(f"Result cross-validation with k=5")
+  print(f"Mean {np.mean(result[1])}")
+  print(f"Standard deviation {np.std(result[1])}")
+  print(f"Result cross-validation with k=10")
+  print(f"Mean {np.mean(result[2])}")
+  print(f"Standard deviation {np.std(result[2])}")
 
 
 

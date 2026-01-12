@@ -1,4 +1,8 @@
 venv/
+DataSetComponent/
+DataSetComponent_Pretraining/
+DataSetStandard/
+DataSetStandard_Pretraining/
 Data_To_Use/Bening/mdb001_90.pgm
 Data_To_Use/Bening/mdb001_180.pgm
 Data_To_Use/Bening/mdb001_270.pgm

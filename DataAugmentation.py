@@ -10,6 +10,7 @@ class DatasetTypes(Enum):
     Standard_PreTraining = 2
     Component = 3
     Component_PreTraining = 4
+    
 
 def pre_process(img):
     bin = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
@@ -71,7 +72,7 @@ def create_dataset(dataset_type:DatasetTypes):
         
         img = cv2.imread(file_name,cv2.IMREAD_GRAYSCALE)
         
-        if(dataset_type == DatasetTypes.Component):
+        if(dataset_type == DatasetTypes.Component or dataset_type == DatasetTypes.Component_PreTraining):
             img = take_component(img, row["x"], row["y"], row["radius"])
         
         img = cv2.resize(img, (224,224), interpolation=cv2.INTER_AREA)
@@ -95,5 +96,3 @@ def create_dataset(dataset_type:DatasetTypes):
         
         flip_v = cv2.flip(img, 0)
         cv2.imwrite(dir_selected+row['image_id']+"_flip_v.pgm", flip_v)
-
-create_dataset(DatasetTypes.Standard)
