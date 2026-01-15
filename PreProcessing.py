@@ -27,7 +27,8 @@ def pre_process(img):
 
 def take_component(img, x, y, radius):
     h, w = img.shape
-    radius = radius+10
+    radius = radius+100
+    y = h - 1 - y
     x1 = max(x - radius, 0)
     x2 = min(x + radius, w)
     y1 = max(y - radius, 0)
@@ -81,3 +82,4 @@ def create_dataset(dataset_type:DatasetTypes):
             img = pre_process(img)
         
         cv2.imwrite(dir_selected+row['image_id']+".pgm", img)
+        

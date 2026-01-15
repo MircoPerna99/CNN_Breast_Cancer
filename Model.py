@@ -1,7 +1,8 @@
 import numpy as np
+import pandas as pd 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras import regularizers
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, AveragePooling2D,Input,Dropout
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, AveragePooling2D,Input,ZeroPadding2D,RandomFlip,RandomRotation,RandomContrast
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from tensorflow.keras import backend as K
@@ -9,39 +10,83 @@ import os
 import cv2
 import tensorflow as tf
 from sklearn.model_selection import KFold
-from DataAugmentation import DatasetTypes,define_folder,create_dataset
+from PreProcessing import DatasetTypes,define_folder,create_dataset
+from enum import Enum
 
-def create_model(seeSummary = False):
+class ModelTypes(Enum):
+    Standard = 1
+    Standard_With_Augmentation = 2
+
+def create_model(kernel_size, learning_rate, momentum):
   model = Sequential(
     [Input(shape=(224, 224, 1)),
-    Conv2D(filters=4, kernel_size=(3,3)),
-    Conv2D(filters=4, kernel_size=(3,3)),
+    ZeroPadding2D(padding=(3, 3)),
+    Conv2D(filters=4, kernel_size=(kernel_size,kernel_size), activation='relu'),
+    Conv2D(filters=4, kernel_size=(kernel_size,kernel_size), activation='relu'),
     MaxPooling2D(pool_size=(2, 2)),
-    Conv2D(filters=16, kernel_size=(3,2)),
+    ZeroPadding2D(padding=(2, 2)),
+    Conv2D(filters=16, kernel_size=(kernel_size,kernel_size), activation='relu'),
     MaxPooling2D(pool_size=(2, 2)),
-    Conv2D(filters=16, kernel_size=(3,2)),
-    MaxPooling2D(pool_size=(2, 1)),
-    Conv2D(filters=80, kernel_size=(3,1)),
-    Conv2D(filters=80, kernel_size=(3,1)),
-    MaxPooling2D(pool_size=(2, 1)),
+    Conv2D(filters=16, kernel_size=(kernel_size,kernel_size), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+    ZeroPadding2D(padding=(1, 1)),
+    Conv2D(filters=80, kernel_size=(kernel_size,kernel_size), activation='relu'),
+    Conv2D(filters=80, kernel_size=(kernel_size,kernel_size), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
     Flatten(),
     Dense(1, activation='sigmoid')
     ]
   )
   
   optimizer = tf.keras.optimizers.SGD(
-      learning_rate=0.01,
-      momentum=0.7,
+      learning_rate=learning_rate,
+      momentum=momentum,
   )
 
   model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
   
-  if(seeSummary):
-    model.summary()
+  return model
+
+def create_model_with_augmentation(kernel_size,learning_rate, momentum):
+  model = Sequential(
+    [Input(shape=(224, 224, 1)),
+    RandomFlip("horizontal_and_vertical"),
+    RandomRotation(0.1),
+    ZeroPadding2D(padding=(3, 3)),
+    Conv2D(filters=4, kernel_size=(kernel_size,kernel_size), activation='relu'),
+    Conv2D(filters=4, kernel_size=(kernel_size,kernel_size), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+    ZeroPadding2D(padding=(2, 2)),
+    Conv2D(filters=16, kernel_size=(kernel_size,kernel_size), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+    Conv2D(filters=16, kernel_size=(kernel_size,kernel_size), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+    ZeroPadding2D(padding=(1, 1)),
+    Conv2D(filters=80, kernel_size=(kernel_size,kernel_size), activation='relu'),
+    Conv2D(filters=80, kernel_size=(kernel_size,kernel_size), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+    Flatten(),
+    Dense(1, activation='sigmoid')
+    ]
+  )
+  
+  optimizer = tf.keras.optimizers.SGD(
+      learning_rate=learning_rate,
+      momentum=momentum,
+  )
+
+  model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     
   return model
 
-def apply_cross_validation(X, y, k=5):
+def take_model(kernel_size,learning_rate, momentum,type:ModelTypes):
+  if(type == ModelTypes.Standard):
+    return create_model(kernel_size,learning_rate, momentum)
+  if(type == ModelTypes.Standard_With_Augmentation):
+    return create_model_with_augmentation(kernel_size,learning_rate, momentum)
+
+
+def apply_cross_validation(X, y, kernel_size,learning_rate, momentum,type_model:ModelTypes, epochs = 50,batch_size=5, k=5):
   kf = KFold(n_splits=k, shuffle=True)
   accuracy_per_fold = []
   
@@ -51,9 +96,8 @@ def apply_cross_validation(X, y, k=5):
     X_train_fold, X_val_fold = X[train_index], X[val_index]
     y_train_fold, y_val_fold = y[train_index], y[val_index]
 
-    model = create_model()
-    
-    model.fit(X_train_fold, y_train_fold,epochs=10,batch_size=10)
+    model = take_model(kernel_size,learning_rate, momentum,type_model)
+    model.fit(X_train_fold, y_train_fold,epochs=epochs,batch_size=batch_size)
 
     y_hat = model(X_val_fold, training=False)
     y_hat = [0 if val < 0.5 else 1 for val in y_hat]
@@ -63,7 +107,8 @@ def apply_cross_validation(X, y, k=5):
     accuracy_per_fold.append(accuracy)
     
   return accuracy_per_fold
-  
+
+
 def load_data(dataset_type:DatasetTypes):
   images = []
   labels = []
@@ -71,11 +116,9 @@ def load_data(dataset_type:DatasetTypes):
   create_dataset(dataset_type)
   folder = define_folder(dataset_type)
   path_base = f"{folder}/"
-
-  path_base_training = path_base+"Training/"
-  path_base_test = path_base+"Test/"
+  
   for label, class_name in enumerate(class_names):
-    class_dir = os.path.join(path_base_training, class_name)
+    class_dir = os.path.join(path_base, class_name)
     print(f"Load class {class_name}...")
     for img_name in os.listdir(class_dir):
       img_path = os.path.join(class_dir, img_name)
@@ -85,26 +128,11 @@ def load_data(dataset_type:DatasetTypes):
         labels.append(label)
     print(f"Load class {class_name} completed")
         
-  X_training = np.array(images, dtype='float32') / 255.0
-  y_training = np.array(labels, dtype='int32')
-  
-  for label, class_name in enumerate(class_names):
-    class_dir = os.path.join(path_base_test, class_name)
-    print(f"Load class {class_name}...")
-    for img_name in os.listdir(class_dir):
-      img_path = os.path.join(class_dir, img_name)
-      img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-      if img is not None:
-        images.append(img)
-        labels.append(label)
-    print(f"Load class {class_name} completed")
-  
-  X_test = np.array(images, dtype='float32') / 255.0
-  y_test = np.array(labels, dtype='int32')
-  
-  return X_training,X_test,y_training, y_test
+  X = np.array(images, dtype='float32') / 255.0
+  y = np.array(labels, dtype='int32')
+  return X,y
 
-
+#MAIN
 devices = tf.config.list_physical_devices('GPU')
 
 if len(devices) > 0:
@@ -113,28 +141,30 @@ if len(devices) > 0:
     tf.config.experimental.set_memory_growth(devices[0], True)
 else:
     print("GPU non trovata.")
+    
+# cross_validation_results=[]
+# learning_rates = [0.01,0.001]
+# momentums = [0.9,0.5]
+# kernel_sizes = [2,3,5]
+# for dataset_type in DatasetTypes:
+#   X, y= load_data(dataset_type)
+#   X_train, X_test,y_train,y_test = train_test_split(X,y, test_size=0.3)
+#   for learning_rate in learning_rates:
+#     for momentum in momentums:
+#       for kernel_size in kernel_sizes:
+#         for model_type in ModelTypes:
+#           details = []
+#           details.append(model_type)
+#           details.append(dataset_type)
+#           details.append(learning_rate)
+#           details.append(momentum)
+#           details.append(kernel_size)
+#           results = apply_cross_validation(X, y,kernel_size,learning_rate, momentum,model_type,k=5)
+#           details.append(np.mean(results))
+#           details.append(np.std(results))
+#           cross_validation_results.append(details)
+# df = pd.DataFrame(cross_validation_results, columns = ['model_type', 'dataset_type', 'learning_rate', 'momentum', 'kernel_size', 'accuracy_mean', 'standard_deviation']) 
+# df.to_csv('result.csv', index=False)  
 
-cross_validation_results=[]
-
-for type in DatasetTypes:
-  X_training,X_test,y_training, y_test= load_data(type)
-  details = []
-  details.append(type)
-  details.append(apply_cross_validation(X_training, y_training, k=5))
-  details.append(apply_cross_validation(X_training, y_training, k=10))
-  cross_validation_results.append(details)
-
-for result in cross_validation_results:
-  print(f"Result for dataset {result[0]}")
-  print(f"Result cross-validation with k=5")
-  print(f"Mean {np.mean(result[1])}")
-  print(f"Standard deviation {np.std(result[1])}")
-  print(f"Result cross-validation with k=10")
-  print(f"Mean {np.mean(result[2])}")
-  print(f"Standard deviation {np.std(result[2])}")
-
-
-
-
-
+    
 

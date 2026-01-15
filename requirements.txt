@@ -1,6 +1,0 @@
-numpy>=1.23.5,<2.0.0
-pandas
-opencv-python
-matplotlib
-scikit-learn
-tensorflow_datasets
