@@ -6,6 +6,7 @@ from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Averag
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from tensorflow.keras import backend as K
+from tensorflow.keras.optimizers.schedules import ExponentialDecay
 import os
 import cv2
 import tensorflow as tf
@@ -17,7 +18,7 @@ class ModelTypes(Enum):
     Standard = 1
     Standard_With_Augmentation = 2
 
-def create_model(kernel_size, learning_rate, momentum):
+def create_model(kernel_size, learning_rate, momentum,with_decay):
   model = Sequential(
     [Input(shape=(224, 224, 1)),
     ZeroPadding2D(padding=(3, 3)),
@@ -38,16 +39,17 @@ def create_model(kernel_size, learning_rate, momentum):
     ]
   )
   
-  optimizer = tf.keras.optimizers.SGD(
-      learning_rate=learning_rate,
-      momentum=momentum,
-  )
+  optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate,momentum=momentum,)
+  
+  if(with_decay):
+    lr_schedule = ExponentialDecay(learning_rate,decay_steps=500,decay_rate=0.2)
+    optimizer = tf.keras.optimizers.SGD(learning_rate=lr_schedule,momentum=momentum)
 
   model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
   
   return model
 
-def create_model_with_augmentation(kernel_size,learning_rate, momentum):
+def create_model_with_augmentation(kernel_size,learning_rate, momentum, with_decay):
   model = Sequential(
     [Input(shape=(224, 224, 1)),
     RandomFlip("horizontal_and_vertical"),
@@ -69,34 +71,35 @@ def create_model_with_augmentation(kernel_size,learning_rate, momentum):
     Dense(1, activation='sigmoid')
     ]
   )
+  optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate,momentum=momentum,)
   
-  optimizer = tf.keras.optimizers.SGD(
-      learning_rate=learning_rate,
-      momentum=momentum,
-  )
+  if(with_decay):
+    lr_schedule = ExponentialDecay(learning_rate,decay_steps=500,decay_rate=0.2)
+    optimizer = tf.keras.optimizers.SGD(learning_rate=lr_schedule,momentum=momentum)
 
   model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     
   return model
 
-def take_model(kernel_size,learning_rate, momentum,type:ModelTypes):
+def take_model(kernel_size,learning_rate, momentum,type:ModelTypes,with_decay):
   if(type == ModelTypes.Standard):
-    return create_model(kernel_size,learning_rate, momentum)
+    return create_model(kernel_size,learning_rate, momentum,with_decay)
   if(type == ModelTypes.Standard_With_Augmentation):
-    return create_model_with_augmentation(kernel_size,learning_rate, momentum)
+    return create_model_with_augmentation(kernel_size,learning_rate, momentum,with_decay)
 
 
-def apply_cross_validation(X, y, kernel_size,learning_rate, momentum,type_model:ModelTypes, epochs = 50,batch_size=5, k=5):
+def apply_cross_validation(X, y, kernel_size,learning_rate, momentum,type_model:ModelTypes,epochs = 50,batch_size=5, k=5, with_decay = False):
   kf = KFold(n_splits=k, shuffle=True)
   accuracy_per_fold = []
   
   for fold, (train_index, val_index) in enumerate(kf.split(X)):
     print(f'Fold {fold+1}')
     K.clear_session()
+    
     X_train_fold, X_val_fold = X[train_index], X[val_index]
     y_train_fold, y_val_fold = y[train_index], y[val_index]
 
-    model = take_model(kernel_size,learning_rate, momentum,type_model)
+    model = take_model(kernel_size,learning_rate, momentum,type_model,with_decay)
     model.fit(X_train_fold, y_train_fold,epochs=epochs,batch_size=batch_size)
 
     y_hat = model(X_val_fold, training=False)
@@ -133,6 +136,7 @@ def load_data(dataset_type:DatasetTypes):
   return X,y
 
 #MAIN
+APPLY_DECAY = False
 devices = tf.config.list_physical_devices('GPU')
 
 if len(devices) > 0:
@@ -142,29 +146,35 @@ if len(devices) > 0:
 else:
     print("GPU non trovata.")
     
-# cross_validation_results=[]
-# learning_rates = [0.01,0.001]
-# momentums = [0.9,0.5]
-# kernel_sizes = [2,3,5]
-# for dataset_type in DatasetTypes:
-#   X, y= load_data(dataset_type)
-#   X_train, X_test,y_train,y_test = train_test_split(X,y, test_size=0.3)
-#   for learning_rate in learning_rates:
-#     for momentum in momentums:
-#       for kernel_size in kernel_sizes:
-#         for model_type in ModelTypes:
-#           details = []
-#           details.append(model_type)
-#           details.append(dataset_type)
-#           details.append(learning_rate)
-#           details.append(momentum)
-#           details.append(kernel_size)
-#           results = apply_cross_validation(X, y,kernel_size,learning_rate, momentum,model_type,k=5)
-#           details.append(np.mean(results))
-#           details.append(np.std(results))
-#           cross_validation_results.append(details)
-# df = pd.DataFrame(cross_validation_results, columns = ['model_type', 'dataset_type', 'learning_rate', 'momentum', 'kernel_size', 'accuracy_mean', 'standard_deviation']) 
-# df.to_csv('result.csv', index=False)  
+cross_validation_results=[]
+learning_rates = [0.01,0.001]
+momentums = [0.9,0.5]
+kernel_sizes = [2,3,5]
+
+for dataset_type in DatasetTypes:
+  X, y= load_data(dataset_type)
+  X_train, X_test,y_train,y_test = train_test_split(X,y, test_size=0.3)
+  for learning_rate in learning_rates:
+    for momentum in momentums:
+      for kernel_size in kernel_sizes:
+        for model_type in ModelTypes:
+          details = []
+          details.append(model_type)
+          details.append(dataset_type)
+          details.append(learning_rate)
+          details.append(momentum)
+          details.append(kernel_size)
+          results = apply_cross_validation(X, y,kernel_size,learning_rate, momentum,model_type,k=5,with_decay=APPLY_DECAY)
+          details.append(np.mean(results))
+          details.append(np.std(results))
+          cross_validation_results.append(details)
+         
+df = pd.DataFrame(cross_validation_results, columns = ['model_type', 'dataset_type', 'learning_rate', 'momentum', 'kernel_size', 'accuracy_mean', 'standard_deviation']) 
+if(APPLY_DECAY):
+  df.to_csv('result_with_decay.csv', index=False)  
+else:
+  df.to_csv('result_standard.csv', index=False)  
+
 
     
 
